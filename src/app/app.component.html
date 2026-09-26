@@ -87,6 +87,8 @@
               <span class="legend-dot correct"></span>合律
               <span class="legend-dot variant"></span>可接受
               <span class="legend-dot error"></span>出律
+              <span class="legend-dot isolated"></span>孤平
+              <span class="legend-dot triple"></span>三平尾
               <span class="legend-dot unknown"></span>待标
             </div>
           </div>
@@ -96,6 +98,8 @@
                 <div class="line-label">
                   <strong>第 {{ line.index + 1 }} 句</strong>
                   <small>{{ line.errors }} 出律 · {{ line.variants }} 变体</small>
+                  @if (line.flaws.includes('isolated')) { <em class="line-flaw">孤平</em> }
+                  @if (line.flaws.includes('triple')) { <em class="line-flaw">三平尾</em> }
                 </div>
                 <div class="character-row">
                   @for (cell of line.cells; track cell.position) {
@@ -105,6 +109,8 @@
                       [class.is-correct]="cell.status === 'correct'"
                       [class.is-variant]="cell.status === 'variant'"
                       [class.is-error]="cell.status === 'error'"
+                      [class.is-isolated]="cell.status === 'isolated'"
+                      [class.is-triple]="cell.status === 'triple'"
                       [class.is-unknown]="cell.status === 'unknown'"
                       nz-tooltip
                       [nzTooltipTitle]="cell.message"
@@ -127,7 +133,7 @@
           </div>
           <div class="meter-footer">
             <span>模板：{{ store.template().summary }}</span>
-            <span>一三五位置可判为可接受变体；韵脚重复单独提示。</span>
+            <span>一三五变体照常宽限，但孤平、三平尾不在其列；平仄未定（待标或标中）的字暂不下结论。</span>
           </div>
         </main>
 

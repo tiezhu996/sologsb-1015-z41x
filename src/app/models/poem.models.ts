@@ -45,12 +45,14 @@ export interface MeterTemplate {
   rhymeLines: number[];
 }
 
+export type LineFlaw = 'isolated' | 'triple';
+
 export interface AnalysisCell {
   char: string;
   position: number;
   expected: Tone;
   actual: Tone;
-  status: 'correct' | 'variant' | 'error' | 'unknown' | 'neutral';
+  status: 'correct' | 'variant' | 'error' | 'isolated' | 'triple' | 'unknown' | 'neutral';
   message: string;
   mark: CharacterMark;
 }
@@ -59,6 +61,7 @@ export interface AnalysisLine {
   index: number;
   cells: AnalysisCell[];
   rhymeChars: string[];
+  flaws: LineFlaw[];
   errors: number;
   variants: number;
 }

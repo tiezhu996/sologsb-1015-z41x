@@ -5,6 +5,7 @@ import type {
   AnalysisLine,
   CharacterMark,
   CharDiff,
+  LineFlaw,
   MarkTone,
   MeterTemplate,
   PoemIssue,
@@ -182,12 +183,14 @@ export class PoetryStoreService {
         }
         return { char, position, expected, actual, status, message, mark };
       });
+      const flaws = this.applyLineFlaws(cells);
       const rhymeChars = template.rhymeLines.includes(lineIndex) ? cells.slice(-1).map((cell) => cell.char) : [];
       return {
         index: lineIndex,
         cells,
         rhymeChars,
-        errors: cells.filter((cell) => cell.status === 'error').length,
+        flaws,
+        errors: cells.filter((cell) => cell.status === 'error' || cell.status === 'isolated' || cell.status === 'triple').length,
         variants: cells.filter((cell) => cell.status === 'variant').length,
       };
     });
@@ -209,6 +212,28 @@ export class PoetryStoreService {
           position: cell.position,
         });
       });
+      if (line.flaws.includes('isolated')) {
+        const lone = line.cells.find((cell) => cell.status === 'isolated' && cell.actual === '平');
+        issues.push({
+          id: uid('issue'),
+          level: 'error',
+          title: '孤平出律',
+          detail: `第 ${line.index + 1} 句除韵脚外仅“${lone?.char ?? ''}”一处平声，犯孤平。`,
+          line: line.index,
+          position: lone?.position,
+        });
+      }
+      if (line.flaws.includes('triple')) {
+        const first = line.cells.find((cell) => cell.status === 'triple');
+        issues.push({
+          id: uid('issue'),
+          level: 'error',
+          title: '三平尾出律',
+          detail: `第 ${line.index + 1} 句末尾三字连用平声，犯三平尾。`,
+          line: line.index,
+          position: first?.position,
+        });
+      }
       if (line.cells.some((cell) => cell.status === 'unknown')) {
         issues.push({ id: uid('issue'), level: 'warning', title: '存在未标注字', detail: `第 ${line.index + 1} 句仍有平仄未确认。`, line: line.index });
       }
@@ -390,9 +415,11 @@ export class PoetryStoreService {
 
   exportProofreadCopy(): string {
     const active = this.activeVersion();
+    const flawLabels: Record<LineFlaw, string> = { isolated: '孤平', triple: '三平尾' };
     const lines = this.analysis().map((line) => {
       const tags = line.cells.map((cell) => `${cell.char}${cell.actual === '?' ? '□' : `(${cell.actual})`}`).join(' ');
-      return `第 ${line.index + 1} 句：${tags}`;
+      const flawTags = line.flaws.map((flaw) => `【${flawLabels[flaw]}】`).join('');
+      return `第 ${line.index + 1} 句：${tags}${flawTags ? ` ${flawTags}` : ''}`;
     });
     const notes = this.issues().map((issue) => `[${issue.level.toUpperCase()}] ${issue.title}：${issue.detail}`);
     return [`# ${this.workspace().title} · 格律校对稿`, '', `底本：${active.name}`, `出处：${active.source}`, '', '## 字音标注', ...lines, '', '## 检查记录', ...notes].join('\n');
@@ -435,5 +462,38 @@ export class PoetryStoreService {
   private isAcceptableVariant(template: MeterTemplate, line: number, position: number): boolean {
     if (template.lineLength === 5) return position === 0 || position === 2;
     return position === 0 || position === 2 || position === 4;
+  }
+
+  /**
+   * 句级收紧检查：孤平与三平尾。
+   * 平仄未标定（?）或两可（中）的字不参与定论；仄声收尾句不查孤平；
+   * 孤平句中一三五位置的仄声变体不再宽限，三平尾句末三字一并标出。
+   */
+  private applyLineFlaws(cells: AnalysisCell[]): LineFlaw[] {
+    const flaws: LineFlaw[] = [];
+    if (!cells.length) return flaws;
+    const settled = (cell: AnalysisCell) => cell.actual === '平' || cell.actual === '仄';
+    const markFlaw = (cell: AnalysisCell, status: LineFlaw, note: string) => {
+      const base = cell.status === 'error' ? `${cell.message}；` : '';
+      cell.status = status;
+      cell.message = `${base}${note}`;
+    };
+    const last = cells[cells.length - 1];
+    if (last.actual === '平' && cells.every(settled)) {
+      const pingCells = cells.slice(0, -1).filter((cell) => cell.actual === '平');
+      if (pingCells.length === 1) {
+        flaws.push('isolated');
+        markFlaw(pingCells[0], 'isolated', '孤平：除韵脚外全句仅此一处平声');
+        cells
+          .filter((cell) => cell.status === 'variant' && cell.actual === '仄')
+          .forEach((cell) => markFlaw(cell, 'isolated', `此处应作${cell.expected}声；一三五不论不适用于孤平句`));
+      }
+    }
+    const tail = cells.slice(-3);
+    if (tail.length === 3 && tail.every(settled) && tail.every((cell) => cell.actual === '平')) {
+      flaws.push('triple');
+      tail.forEach((cell) => markFlaw(cell, 'triple', '三平尾：句末三字连用平声'));
+    }
+    return flaws;
   }
 }

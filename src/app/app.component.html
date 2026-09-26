@@ -87,6 +87,8 @@
               <span class="legend-dot correct"></span>合律
               <span class="legend-dot variant"></span>可接受
               <span class="legend-dot error"></span>出律
+              <span class="legend-dot lone-level"></span>孤平
+              <span class="legend-dot triple-level"></span>三平尾
               <span class="legend-dot unknown"></span>待标
             </div>
           </div>
@@ -95,7 +97,11 @@
               <article class="meter-line" [class.is-rhyme-line]="store.template().rhymeLines.includes(line.index)">
                 <div class="line-label">
                   <strong>第 {{ line.index + 1 }} 句</strong>
-                  <small>{{ line.errors }} 出律 · {{ line.variants }} 变体</small>
+                  <small>
+                    {{ line.errors }} 出律 · {{ line.variants }} 变体
+                    @if (line.loneLevel) { · 孤平 }
+                    @if (line.tripleLevel) { · 三平尾 }
+                  </small>
                 </div>
                 <div class="character-row">
                   @for (cell of line.cells; track cell.position) {
@@ -105,6 +111,8 @@
                       [class.is-correct]="cell.status === 'correct'"
                       [class.is-variant]="cell.status === 'variant'"
                       [class.is-error]="cell.status === 'error'"
+                      [class.is-lone-level]="cell.status === 'lone-level'"
+                      [class.is-triple-level]="cell.status === 'triple-level'"
                       [class.is-unknown]="cell.status === 'unknown'"
                       nz-tooltip
                       [nzTooltipTitle]="cell.message"
@@ -127,7 +135,7 @@
           </div>
           <div class="meter-footer">
             <span>模板：{{ store.template().summary }}</span>
-            <span>一三五位置可判为可接受变体；韵脚重复单独提示。</span>
+            <span>一三五位置可判为可接受变体；孤平、三平尾单独标示；韵脚重复单独提示。</span>
           </div>
         </main>
 
@@ -201,7 +209,7 @@
                 [class.level-info]="issue.level === 'info'"
                 (click)="issue.line !== undefined && store.selectCell(issue.line, issue.position || 0)"
               >
-                <span class="issue-symbol">{{ issue.level === 'error' ? '出' : issue.level === 'warning' ? '核' : '合' }}</span>
+                <span class="issue-symbol">{{ issue.title === '孤平' ? '孤' : issue.title === '三平尾' ? '三' : issue.level === 'error' ? '出' : issue.level === 'warning' ? '核' : '合' }}</span>
                 <span><strong>{{ issue.title }}</strong><small>{{ issue.detail }}</small></span>
                 @if (issue.line !== undefined) { <em>定位第 {{ issue.line + 1 }} 句</em> }
               </button>

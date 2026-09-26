@@ -182,6 +182,7 @@ export class PoetryStoreService {
         }
         return { char, position, expected, actual, status, message, mark };
       });
+      this.applyLinePatterns(cells, template);
       const rhymeChars = template.rhymeLines.includes(lineIndex) ? cells.slice(-1).map((cell) => cell.char) : [];
       return {
         index: lineIndex,
@@ -189,6 +190,8 @@ export class PoetryStoreService {
         rhymeChars,
         errors: cells.filter((cell) => cell.status === 'error').length,
         variants: cells.filter((cell) => cell.status === 'variant').length,
+        loneLevel: cells.some((cell) => cell.status === 'lone-level'),
+        tripleLevel: cells.some((cell) => cell.status === 'triple-level'),
       };
     });
   });
@@ -209,6 +212,27 @@ export class PoetryStoreService {
           position: cell.position,
         });
       });
+      if (line.loneLevel) {
+        const cell = line.cells.find((item) => item.status === 'lone-level');
+        issues.push({
+          id: uid('issue'),
+          level: 'error',
+          title: '孤平',
+          detail: `第 ${line.index + 1} 句“${cell?.char}”：${cell?.message}`,
+          line: line.index,
+          position: cell?.position,
+        });
+      }
+      if (line.tripleLevel) {
+        issues.push({
+          id: uid('issue'),
+          level: 'error',
+          title: '三平尾',
+          detail: `第 ${line.index + 1} 句：句末连续三个平声，属出律。`,
+          line: line.index,
+          position: line.cells.length - 3,
+        });
+      }
       if (line.cells.some((cell) => cell.status === 'unknown')) {
         issues.push({ id: uid('issue'), level: 'warning', title: '存在未标注字', detail: `第 ${line.index + 1} 句仍有平仄未确认。`, line: line.index });
       }
@@ -390,8 +414,13 @@ export class PoetryStoreService {
 
   exportProofreadCopy(): string {
     const active = this.activeVersion();
+    const defectTags: Partial<Record<AnalysisCell['status'], string>> = {
+      error: '〔出律〕',
+      'lone-level': '〔孤平〕',
+      'triple-level': '〔三平尾〕',
+    };
     const lines = this.analysis().map((line) => {
-      const tags = line.cells.map((cell) => `${cell.char}${cell.actual === '?' ? '□' : `(${cell.actual})`}`).join(' ');
+      const tags = line.cells.map((cell) => `${cell.char}${cell.actual === '?' ? '□' : `(${cell.actual})`}${defectTags[cell.status] ?? ''}`).join(' ');
       return `第 ${line.index + 1} 句：${tags}`;
     });
     const notes = this.issues().map((issue) => `[${issue.level.toUpperCase()}] ${issue.title}：${issue.detail}`);
@@ -435,5 +464,30 @@ export class PoetryStoreService {
   private isAcceptableVariant(template: MeterTemplate, line: number, position: number): boolean {
     if (template.lineLength === 5) return position === 0 || position === 2;
     return position === 0 || position === 2 || position === 4;
+  }
+
+  private applyLinePatterns(cells: AnalysisCell[], template: MeterTemplate): void {
+    // 字数不合模板或仍有未标定的字，先不下结论
+    if (cells.length !== template.lineLength) return;
+    if (cells.some((cell) => cell.actual === '?')) return;
+    const tones = cells.map((cell) => cell.actual);
+
+    // 三平尾：句末连续三个平声
+    if (tones.slice(-3).every((tone) => tone === '平')) {
+      cells.slice(-3).forEach((cell) => {
+        cell.status = 'triple-level';
+        cell.message = '三平尾：句末连用三个平声，属出律';
+      });
+    }
+
+    // 孤平：平声收尾的句子，除韵脚外全句只剩一个平声；仄声收尾不受此限
+    if (tones[tones.length - 1] !== '平') return;
+    const innerPing = cells.slice(0, -1).filter((cell) => cell.actual === '平');
+    if (innerPing.length > 1) return;
+    const target = innerPing[0] ?? cells[cells.length - 1];
+    target.status = 'lone-level';
+    target.message = innerPing.length === 1
+      ? '孤平：平收句除韵脚外仅剩这一个平声'
+      : '孤平：平收句除韵脚外已无其他平声';
   }
 }

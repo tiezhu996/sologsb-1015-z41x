@@ -50,7 +50,7 @@ export interface AnalysisCell {
   position: number;
   expected: Tone;
   actual: Tone;
-  status: 'correct' | 'variant' | 'error' | 'unknown' | 'neutral';
+  status: 'correct' | 'variant' | 'error' | 'lone-level' | 'triple-level' | 'unknown' | 'neutral';
   message: string;
   mark: CharacterMark;
 }
@@ -61,6 +61,8 @@ export interface AnalysisLine {
   rhymeChars: string[];
   errors: number;
   variants: number;
+  loneLevel: boolean;
+  tripleLevel: boolean;
 }
 
 export interface PoemIssue {
